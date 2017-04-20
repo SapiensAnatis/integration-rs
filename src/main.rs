@@ -60,7 +60,7 @@ fn IsValidExp(exp: &str) -> (bool, &str) {
         return (false, "Variables other than x are currently unsupported!");
     }
     else if (4 == 2) {
-        // other cases here. example included
+        // other cases here. example included:
         return (false, "Maths is currently broken. Please try again later.")
     }
     else {

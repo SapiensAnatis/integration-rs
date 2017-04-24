@@ -2,69 +2,106 @@ extern crate regex;
 #[macro_use] extern crate lazy_static;
 
 use regex::Regex;
-use std::io;
-use std::io::prelude::*;   
-extern crate eval;
-use eval::eval;     
-
-const FUNCS: &'static [&'static str] = &["sin", "cos", "tan", "min", "max", "ln", "log"];                                                   
-
+//use std::io;
+//use std::io::prelude::*;   
 
 fn main() {
-    let mut inputExp = String::new();
-    println!("Please enter an expression of the form y = f(x):\n");
+    //let mut input_exp = String::new();
+    let preset_exp = "sin ( max ( 2, 3 ) / 3 * 3.1415 )";
+    println!("Please enter an equation of the form y = f(x):\n");
     print!("y = ");
-    io::stdout().flush();
-    io::stdin().read_line(&mut inputExp);
-    let truExp = InfixAndSubstitute(&inputExp, &4f64);
-    println!("Will feed {} to eval", truExp);
-    let result = eval(&truExp).unwrap();
-    println!("Eval result: ");
-    println!("{}", result)
-
+    /*io::stdout().flush();
+    io::stdin().read_line(&mut input_exp);*/
+    print!("{}", preset_exp);
+    let (is_valid, reason) = expression_is_valid(&preset_exp);
+    if is_valid {
+        let exp = clean_expression(&preset_exp, &4f64);
+        println!("\nExpression: y = {}", preset_exp);
+        println!("Reformatted as: y = {}", exp);
+        println!("Shunting Yard RPN result: ");
+        for thing in shunting_yard(&exp) {
+            print!("{} ", thing);
+        }
+    } else {
+        println!("Invalid expression: {}", reason);
+    }
+    
 }
 
-fn PrintVec(vecToPrint: &Vec<&str>) {
-    for item in vecToPrint {
-        print!("{}", item);
-    }
-}
-
-
-fn IsValidExp(exp: &str) -> (bool, &str) {
-    if Regex::new(r"[a-w]|[y-z]").unwrap().is_match(exp) {
-        return (false, "Variables other than x are currently unsupported.");
-    }
-    else if exp.matches("(").count() != exp.matches(")").count() {
+fn expression_is_valid(exp: &str) -> (bool, &str) {
+    // Used to match for non-x variables. Can't do that as I did before because we now support sin/cos/tan
+    if exp.matches("(").count() != exp.matches(")").count() {
         // other cases here. example included:
         return (false, "Unclosed brackets detected.")
-    }
-    else {
+    } else {
         return (true, "Valid expression!");
     }
 }
 
-/* fn ShuntingYard(exp: &str) -> Vec<&str> {
+fn clean_expression(exp: &str, x: &f64) -> String {
+    /* Make sure everything is formatted well enough for shunting yard
+       e.g. sin(max(2, 3) / 3 * 3.1415)(2*x) to
+       sin ( max ( 2, 3 ) / 3 * 3.1415 ) * ( 2 * 19 ) for x = 19
+       Specifically, this is needed to make tokenization easier.
+    */
+    
+    let mut modified_exp = String::from(exp.replace(" ", "")); // Create an actual string from our ref string
+    // Remove all whitespace so we can be sure of what we're dealing with
+
+    // We'll first parse x so we have a fully non-algebraic expression:
+    modified_exp = modified_exp.replace(" ", "");
+    // if there is no number in front of x, make it 1*x for simplicity
+    for lone_x in Regex::new(r"[^ma\w]x").unwrap().find_iter(exp) {
+        // True start is start+1 since I can't use lookbehinds in Rust
+        // Also don't match ma so as not to get confused with max
+        modified_exp.insert_str(lone_x.start()+1, "1"); // change just 'x' to '1x' so the next bit of code is universal
+        println!("{}", modified_exp);
+    }
+    modified_exp = modified_exp.replace("x1", "1x"); // for some reason this can happen with powers. temporary hack
+   
+    // Now we replace 4x with 4*x so it makes sense. This is why we changed x to 1x, so it's now 1*x.
+    modified_exp = modified_exp.replace("x", "*x");
+    
+    // Have bracket multiplication make sense to SY algorithm:
+    modified_exp = modified_exp.replace(")(", ")*(");
+
+    for c in r"+-*/,|^()".chars() {
+        modified_exp = modified_exp.replace(c, &format!(" {} ", c));
+        // Space everything out to make tokenization easier. The main feature of this function
+    }
+    
+    // There will be _some_ double whitespace (bracket multiplication comes to mind), which we'll remove:
+    modified_exp = Regex::new(r"\s{2,}").unwrap()
+                    .replace_all(&modified_exp, " ")
+                    .into_owned(); // Convert COW object into an actual usable String
+    // Finally put in x:
+    modified_exp = modified_exp.replace("x", &x.to_string());
+    // the replace with x stuff picks on the last letter of max(a,b)
+    modified_exp = modified_exp.replace(&format!("ma * {}", x), "max"); // hence, "temporary" hack 2
+    
+    return modified_exp;
+}
+
+fn shunting_yard(exp: &str) -> Vec<String> {
     // Shunting yard. This is way over my head to comment so refer to: https://en.wikipedia.org/wiki/Shunting-yard_algorithm
+    // I mean, I know each of the steps but I have no idea why they're there
     let mut stack = Vec::new();
     let mut output = Vec::new();
     // Tokenize exp:
     for token in exp.trim().split(" ") {
-        println!("Evaluating token {}", token);
         // First check if it's a number
-        let tokenNumber = token.parse::<f64>();
-        if tokenNumber.is_ok() {
-            println!("\tThe token was a number, so it was pushed to the output stack.");
+        let token_number = token.parse::<f64>();
+        if token_number.is_ok() {
+            // If so, simply push to stack
             output.push(token); // must push a string to maintain typing
-            continue;
         } // Function token?
-        else if TokenIsFunction(token) {
-            println!("\tThe token as a function, so it was pushed to the operator stack.");
+        else if token_is_function(token) {
+            // If so, simply push to stack (yet again). Trust me, it gets worse later.
             stack.push(token);
-            continue;
+            //TraceStackAndOutput(&stack, &output);
         } // function argument seperator
         else if token == "," {
-            println!("\tThe token was a comma, so we'll keep pushing until we find a left parenthesis.");
+            // getting there. Now we have to look for the next left parentheses.
             while stack.last() != Some(&"(") {
                 output.push(stack.pop().unwrap());
                 if stack.is_empty() { // no left parenthesis found
@@ -72,76 +109,65 @@ fn IsValidExp(exp: &str) -> (bool, &str) {
                     // TODO: handle
                 }
             }
-            continue;
-        } // If it's an operator
-        else if TokenIsOperator(token) { 
-            println!("\tThe token was an operator, so we'll establish precedence and do a bunch of weird shit");
-            let (o1IsRightAssoc, o1Priority) = PrecAndAssoc(token);
-            println!("\t\tThe operator {} was established to have right associativity {} and precedence {}", token, o1IsRightAssoc, o1Priority);
-            loop {
-                if stack.is_empty() { 
-                    println!("\t\tThe stack was empty, so we stopped.");
-                    stack.push(token);
-                    break; 
-                }
-
-                if TokenIsOperator(stack.last().expect("wtf")) {
-                    println!("\t\tThe value at the top of the stack, {}, was an operator.", stack.last().expect("wtf"));
-                    let (o2IsRightAssoc, o2Priority) = PrecAndAssoc(stack.last().expect("wtf"));
-                    if (!o1IsRightAssoc && o1Priority <= o2Priority) || (o1IsRightAssoc && o1Priority < o2Priority) {
-                        println!("\t\teither o1 is left-associative and its precedence is less than or equal to that of o2, or o1 is right associative, and has precedence less than that of o2");
+        } // If it's an operator. probably most complicated branch
+        else if token_is_operator(token) { 
+            let (o1_is_right_assoc, o1_priority) = priority_and_associativity(token);
+            while let Some(&top) = stack.last() {
+                if token_is_operator(top) {
+                    let (_, o2_priority) = priority_and_associativity(top);
+                    if (!o1_is_right_assoc && o1_priority <= o2_priority) || (o1_is_right_assoc && o1_priority < o2_priority) {
                         output.push(stack.pop().unwrap());
-                        continue;
-                    }
+                    } else { break; }
                 }
-                println!("\t\tNow pushing {} to the stack", token);
-                stack.push(token);
-                break;
+                else { break; }
             }
+            // once iteration is over, push the original token
+            stack.push(token);
+            //TraceStackAndOutput(&stack, &output);
         }
         else if token == "(" {
-            println!("\tThe token was a bracket, so we'll push it to the stack.");
+            // Left brackets just get shoved onto the stack no questions asked
             stack.push(token);
+
+            //TraceStackAndOutput(&stack, &output);
         }
         else if token == ")" {
-            println!("\tThe token was a right bracket so we'll keep going until we find the next bracket.");
-            while stack.last() != Some(&"(") {
-                output.push(stack.pop().unwrap());
+            // Right brackets, however, trigger an investigation for their brother ;(
+            while let Some(&element) = stack.last() {
+                if element == "(" {
+                    break;
+                }
+                else {
+                    output.push(stack.pop().unwrap());
+                }
             }
 
             stack.pop(); // the left parenthesis we were looking for
+            // Pop it, but don't add it to the output. RPN doesn't use parentheses.
             
-            if TokenIsFunction(stack.last().unwrap()) {
-                output.push(stack.pop().unwrap());
+            if let Some(&element) = stack.last() {
+                if token_is_function(element) {
+                    output.push(stack.pop().unwrap());
+                }
             }
-        }
-    }
+            //TraceStackAndOutput(&stack, &output);
+        } else { println!("Syntax error! Token {} was not identified as any type of token. Therefore, the resulting RPN expression is probably incorrect", token); }
+    } 
     
-    if !stack.is_empty() {
-        for token in stack {
-            if TokenIsOperator(token) {
-                output.push(token);
-                // Don't need to remove from stack as we won't use it after this.
-            }
-        } // very surprised if this works
+    for _ in stack.clone() {
+        output.push(stack.pop().unwrap()); // Push all remaining contents of stack to output
     }
-    output
-} */
-
-fn PrecAndAssoc(token: &str) -> (bool, u8) {
-    match token {
-        "^" => return (true, 0), // Is right associative and highest priority
-        "*" | "/" => return (false, 1), // Is left associative
-        "+" | "-" => return (false, 2), // Least priority
-        _ => return (false, 0), // what
+    //TraceStackAndOutput(&stack, &output);
+    // Return. We have a vec of references, so we'll need to sort that by cloning them individually.
+    let mut typed_output: Vec<String> = Vec::new();
+    for string_ref in output {
+        typed_output.push(string_ref.to_string());
     }
-}
 
-fn TokenIsOperator(token: &str) -> bool { // kind of a hack
-    return (r"+-*/^".matches(token).count() > 0)
-}
+    return typed_output;
+} 
 
-fn TokenIsFunction(token: &str) -> bool {
+fn token_is_function(token: &str) -> bool { // Determines whether a given token is a function op by seeing if it's 2 or more letters
     lazy_static! {
         static ref IS_FUNC_REGEX: Regex = Regex::new(r"\w{2,}").unwrap();
         // Compiling a regex can take quite a while, so I use this crate to only do it once.
@@ -149,47 +175,16 @@ fn TokenIsFunction(token: &str) -> bool {
     return IS_FUNC_REGEX.is_match(token);
 }
 
-fn CalculateFromOutput( /* something */ ) -> f64 {
-    // Take our output from Shunting Yard and give a result
-    unimplemented!();
+
+fn token_is_operator(token: &str) -> bool { // kind of a hack. Determines if a token is one of the characters which constitutes an operator
+    return r"+-/^*".matches(token).count() > 0
 }
 
-fn InfixAndSubstitute(exp: &str, x: &f64) -> String {
-    /* Make sure everything is formatted well enough for shunting yard
-       e.g. sin(max(2, 3) / 3 * 3.1415)(2*x) to
-       sin ( max ( 2, 3 ) / 3 * 3.1415 ) * ( 2 * 19 ) for x = 19
-       Specifically, this is needed to make tokenization easier.
-    */
-    
-    let mut modifiedExp = String::from(exp.replace(" ", "")); // Create an actual string from our ref string
-    // Remove all whitespace so we can be sure of what we're dealing with
-
-    // We'll first parse x so we have a fully non-algebraic expression:
-    modifiedExp = modifiedExp.replace(" ", "");
-    // if there is no number in front of x, make it 1*x for simplicity
-    for loneX in Regex::new(r"[^ma\w]x").unwrap().find_iter(exp) {
-        // True start is start+1 since I can't use lookbehinds in Rust
-        // Also don't match ma so as not to get confused with max
-        modifiedExp.insert_str(loneX.start()+1, "1"); // change just 'x' to '1x' so the next bit of code is universal
-        println!("{}", modifiedExp);
+fn priority_and_associativity(token: &str) -> (bool, u8) { // Matches ops to associativity and precedence/priority
+    match token {
+        "^" => return (true, 0), // Is right associative and highest priority
+        "*" | "/" => return (false, 1), // Is left associative
+        "+" | "-" => return (false, 2), // Least priority
+        _ => return (false, 0), // what
     }
-    modifiedExp = modifiedExp.replace("x1", "1x"); // for some reason this can happen with powers. temporary hack
-   
-    // Now we replace 4x with 4*x so it makes sense. This is why we changed x to 1x, so it's now 1*x.
-    modifiedExp = modifiedExp.replace("x", "*x");
-    println!("EXP--------------------------------------------{}", modifiedExp);
-    
-    for c in r"+-*/,|^()".chars() {
-        modifiedExp = modifiedExp.replace(c, &format!(" {} ", c));
-    }
-    // There will be _some_ double whitespace (bracket multiplication comes to mind), which we'll remove:
-    modifiedExp = Regex::new(r"\s{2,}").unwrap()
-                    .replace_all(&modifiedExp, " ")
-                    .into_owned(); // Convert COW object into an actual usable String
-    // Finally put in x:
-    modifiedExp = modifiedExp.replace("x", &x.to_string());
-    modifiedExp = modifiedExp.replace(&format!("ma * {}", x), "max"); // "temporary" hack 2
-    // the replace with x stuff picks on the last letter of max(a,b)
-    return modifiedExp;
 }
-

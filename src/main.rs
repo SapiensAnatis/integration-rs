@@ -6,7 +6,7 @@ use regex::Regex;
 
 fn main() {
     //let mut input_exp = String::new();
-    let preset_exp = "3 + 4 * 2 / ( 1 - 5 ) ^ 2 ^ 3";
+    let preset_exp = "x^2";
     println!("Please enter an equation of the form y = f(x):\n");
     print!("y = ");
     /*io::stdout().flush();
@@ -14,24 +14,8 @@ fn main() {
     println!("{}", preset_exp);
     let (is_valid, reason) = expression_is_valid(&preset_exp);
     if is_valid {
-        let exp = clean_expression(&preset_exp);
-        println!("\nExpression: y = {}", preset_exp);
-        println!("Reformatted as: y = {}", exp);
-        print!("\nShunting Yard RPN result: ");
-        let sy = shunting_yard(&exp);
-        { // Scope in before we immutably borrow; we need to mutably borrow later
-            for thing in &sy {
-                print!("{} ", thing);
-            }
-        }
-        let mut spfx = substitute(sy, &4f64);
-        print!("\nSubstituted postfix: ");
-        {
-            for thing in &spfx {
-                print!("{} ", thing);
-            }
-        }
-        println!("\nSubstituted expression result for x = 4: {}", evaluate_postfix(&mut spfx));
+        println!("Test sub into x^2 of x = 4: {}", evaluate_postfix(&substitute_rpn(&shunting_yard(&clean_expression(&preset_exp)), &4f64)));
+        println!("4-strip area between 0 and 4: {}", trapezium_rule(preset_exp, &0f64, &4f64, 4));
     } else {
         println!("Invalid expression: {}", reason);
     }
@@ -119,17 +103,7 @@ fn reformat_trace(partial_exp: &String) {
     println!("Partial reformat: {}", partial_exp);
 }
 
-fn substitute(postfix_exp: Vec<String>, x: &f64) -> Vec<String> {
-    let mut output: Vec<String> = Vec::new();
-    
-    for token in postfix_exp {
-        if token == "x" {
-            output.push(x.to_string()); 
-        } else { output.push(token); }
-    }
-    
-    return output;
-}
+
 
 // Shunting yard & component funcs. Some are also used in RPN.
 
@@ -247,7 +221,19 @@ fn convert_str_vec(vec: &Vec<&str>) -> Vec<String> {
 
 // RPN funcs
 
-fn evaluate_postfix(stack: &mut Vec<String>) -> f64 {
+fn substitute_rpn(postfix_exp: &Vec<String>, x: &f64) -> Vec<String> {
+    let mut output: Vec<String> = Vec::new();
+    
+    for token in postfix_exp {
+        if token == "x" {
+            output.push(x.to_string()); 
+        } else { output.push(token.to_string()); }
+    }
+    
+    return output;
+}
+
+fn evaluate_postfix(stack: &Vec<String>) -> f64 {
     let mut output: Vec<f64> = Vec::new();
 
     while output.len() != 1 { // Process
@@ -345,5 +331,33 @@ fn evaluate_postfix(stack: &mut Vec<String>) -> f64 {
         println!("An unknown error occured.");
         return 0f64;
     }
+}
 
 
+
+fn trapezium_rule(exp: &str, min_x: &f64, max_x: &f64, strips: u64) -> f64 { // Integrate: the actual purpose of this program, after only 350 lines
+    // Calculate strip width
+    let interval = (max_x - min_x).abs();
+    let strip_width = interval/(strips as f64);
+    let mut x = 0f64;
+    let mut y_values: Vec<f64> = Vec::new();
+    // RPN our exp
+    let rpn = shunting_yard(&clean_expression(&exp));
+    // Get y-values for formula
+    for i in 0..strips+1 {
+        x = min_x + strip_width * (i as f64);
+        y_values.push(evaluate_postfix(&substitute_rpn(&rpn, &x)));
+    }
+
+    let mut result: f64 = 0f64;
+    // 0.5h(a + z + 2(b....y))
+    // First add the outer ones
+    result += y_values.pop().unwrap();
+    result += y_values[0];
+    y_values.remove(0);
+    // Then add all except the outer ones again
+    for value in &y_values { result += (2f64 * value.clone()); }
+    // Finally multiply all by 0.5 * h
+    result *= (0.5f64 * strip_width);
+    return result;
+}

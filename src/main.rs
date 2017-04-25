@@ -6,7 +6,6 @@ use std::io::prelude::*;
 
 fn main() {
     //let mut input_exp = String::new();
-    let preset_exp = "x^2";
     println!("Please enter an equation of the form y = f(x):");
     let input_exp = get_input("y =");
     let strips_str = get_input("How many strips do you want to use?");
@@ -33,8 +32,8 @@ fn main() {
 fn get_input(prompt: &str) -> String {
     let mut input = String::new();
     print!("\n{} ", prompt);
-    io::stdout().flush();
-    io::stdin().read_line(&mut input);
+    io::stdout().flush().ok().expect("Couldn't flush stdout");
+    io::stdin().read_line(&mut input).expect("Couldn't read line");
     return input;
 }
 
@@ -114,10 +113,6 @@ fn clean_expression(exp: &str) -> String {
     modified_exp = modified_exp.replace(" π ", "3.14159265359");
 
     return modified_exp;
-}
-
-fn reformat_trace(partial_exp: &String) {
-    println!("Partial reformat: {}", partial_exp);
 }
 
 
@@ -354,16 +349,19 @@ fn evaluate_postfix(stack: &Vec<String>) -> f64 {
 
 fn trapezium_rule(exp: &str, min_x: &f64, max_x: &f64, strips: &u16) -> f64 { // Integrate: the actual purpose of this program, after only 350 lines
     // Calculate strip width
+
     let interval = (max_x - min_x).abs();
     let strip_width = interval / strips.clone() as f64;
-    let mut x = 0f64;
     let mut y_values: Vec<f64> = Vec::new();
     // RPN our exp
     let rpn = shunting_yard(&clean_expression(&exp));
     // Get y-values for formula
     for i in 0..strips+1 {
-        x = min_x + strip_width * (i as f64);
-        y_values.push(evaluate_postfix(&substitute_rpn(&rpn, &x)));
+        y_values.push(
+            evaluate_postfix(
+                &substitute_rpn(&rpn, &(min_x + strip_width * (i as f64)) )
+            )
+        );
     }
 
     let mut result: f64 = 0f64;
@@ -373,8 +371,8 @@ fn trapezium_rule(exp: &str, min_x: &f64, max_x: &f64, strips: &u16) -> f64 { //
     result += y_values[0];
     y_values.remove(0);
     // Then add all except the outer ones again
-    for value in &y_values { result += (2f64 * value.clone()); }
+    for value in &y_values { result += 2f64 * value.clone(); }
     // Finally multiply all by 0.5 * h
-    result *= (0.5f64 * strip_width);
+    result *= 0.5f64 * strip_width;
     return result;
 }

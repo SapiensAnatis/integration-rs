@@ -3,7 +3,6 @@ extern crate regex;
 use regex::Regex;
 use std::io;
 use std::io::prelude::*;   
-use std::ops::Div;
 
 fn main() {
     //let mut input_exp = String::new();

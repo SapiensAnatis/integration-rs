@@ -1,26 +1,44 @@
 extern crate regex;
 #[macro_use] extern crate lazy_static;
 use regex::Regex;
-//use std::io;
-//use std::io::prelude::*;   
+use std::io;
+use std::io::prelude::*;   
+use std::ops::Div;
 
 fn main() {
     //let mut input_exp = String::new();
     let preset_exp = "x^2";
-    println!("Please enter an equation of the form y = f(x):\n");
-    print!("y = ");
-    /*io::stdout().flush();
-    io::stdin().read_line(&mut input_exp);*/
-    println!("{}", preset_exp);
-    let (is_valid, reason) = expression_is_valid(&preset_exp);
+    println!("Please enter an equation of the form y = f(x):");
+    let input_exp = get_input("y =");
+    let strips_str = get_input("How many strips do you want to use?");
+    let start_str = get_input("Where on the x-axis does the region start?");
+    let end_str = get_input("Where does it end?");
+
+    // Parse args
+    let strips = strips_str.trim().parse::<u16>()
+        .expect("Real numbers only, please.");
+    let start = start_str.trim().parse::<f64>()
+        .expect("Real numbers only, please.");
+    let end = end_str.trim().parse::<f64>()
+        .expect("Real numbers only, please.");
+
+    let (is_valid, reason) = expression_is_valid(&input_exp);
     if is_valid {
-        println!("Test sub into x^2 of x = 4: {}", evaluate_postfix(&substitute_rpn(&shunting_yard(&clean_expression(&preset_exp)), &4f64)));
-        println!("4-strip area between 0 and 4: {}", trapezium_rule(preset_exp, &0f64, &4f64, 4));
+        println!("4-strip area between 0 and 4: {}", trapezium_rule(&input_exp, &start, &end, &strips));
     } else {
         println!("Invalid expression: {}", reason);
     }
     
 }
+
+fn get_input(prompt: &str) -> String {
+    let mut input = String::new();
+    print!("\n{} ", prompt);
+    io::stdout().flush();
+    io::stdin().read_line(&mut input);
+    return input;
+}
+
 
 // Formatting/validation funcs
 
@@ -335,10 +353,10 @@ fn evaluate_postfix(stack: &Vec<String>) -> f64 {
 
 
 
-fn trapezium_rule(exp: &str, min_x: &f64, max_x: &f64, strips: u64) -> f64 { // Integrate: the actual purpose of this program, after only 350 lines
+fn trapezium_rule(exp: &str, min_x: &f64, max_x: &f64, strips: &u16) -> f64 { // Integrate: the actual purpose of this program, after only 350 lines
     // Calculate strip width
     let interval = (max_x - min_x).abs();
-    let strip_width = interval/(strips as f64);
+    let strip_width = interval / strips.clone() as f64;
     let mut x = 0f64;
     let mut y_values: Vec<f64> = Vec::new();
     // RPN our exp

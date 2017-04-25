@@ -108,9 +108,9 @@ fn substitute(postfix_exp: Vec<String>, x: &f64) -> Vec<String> {
         if token == "x" {
             output.push(x.to_string());
         } else if token == "pi" || token == "π" {
-            output.push("3.14159265359"); // I mean, I already need it as a string, so why not?
+            output.push("3.14159265359".to_string()); // I mean, I already need it as a string, so why not?
         } else if token == "e" {
-            output.push("2.71828182845");
+            output.push("2.71828182845".to_string());
         }
         else { output.push(token); }
     }

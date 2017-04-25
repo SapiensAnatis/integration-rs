@@ -107,7 +107,12 @@ fn substitute(postfix_exp: Vec<String>, x: &f64) -> Vec<String> {
     for token in postfix_exp {
         if token == "x" {
             output.push(x.to_string());
-        } else { output.push(token); }
+        } else if token == "pi" || token == "π" {
+            output.push("3.14159265359");
+        } else if token == "e" {
+            output.push("2.71828182845");
+        }
+        else { output.push(token); }
     }
     
     return output

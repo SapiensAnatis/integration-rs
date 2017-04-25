@@ -78,9 +78,7 @@ fn clean_expression(exp: &str) -> String {
     modified_exp = Regex::new(r"[^a]x").unwrap()
                     .replace_all(&modified_exp, "*x")
                     .into_owned();
-                    
-    
-    
+
     // Have bracket multiplication make sense to SY algorithm:
     modified_exp = modified_exp.replace(")(", ")*(");
     modified_exp = modified_exp.replace(")x", ")*x");
@@ -132,7 +130,6 @@ fn shunting_yard(exp: &str) -> Vec<String> {
         else if token_is_function(token) {
             // If so, simply push to stack (yet again). Trust me, it gets worse later.
             stack.push(token);
-            //
         } // function argument seperator
         else if token == "," {
             // getting there. Now we have to look for the next left parentheses.
@@ -157,13 +154,10 @@ fn shunting_yard(exp: &str) -> Vec<String> {
             }
             // once iteration is over, push the original token
             stack.push(token);
-             
         }
         else if token == "(" {
             // Left brackets just get shoved onto the stack no questions asked
-            stack.push(token);
-
-             
+            stack.push(token);      
         }
         else if token == ")" {
             // Right brackets, however, trigger an investigation for their brother ;(
@@ -311,6 +305,7 @@ fn evaluate_postfix(stack: &mut Vec<String>) -> f64 {
                     "max" => operands[0].max(operands[1]),
                     "min" => operands[0].min(operands[1]),
                     "cbrt" => operands[0].cbrt(),
+                    "exp" => operands[0].exp(),
                     _ => 0f64,
                     // Rust's matching syntax means this block of code is a lot better than it _could_ be,
                     // but it's still pretty bad.

@@ -13,7 +13,7 @@ fn main() {
     let end_str = get_input("Where does it end?");
 
     // Parse args
-    let strips = strips_str.trim().parse::<u16>()
+    let strips = strips_str.trim().parse::<u64>()
         .expect("Real numbers only, please.");
     let start = start_str.trim().parse::<f64>()
         .expect("Real numbers only, please.");
@@ -298,7 +298,6 @@ fn evaluate_postfix(stack: &Vec<String>) -> f64 {
                         "sin" => operands[0].sin(),
                         "cos" => operands[0].cos(),
                         "tan" => operands[0].tan(),
-                        "abs" => operands[0].abs(),
                         "arcsin" => operands[0].asin(),
                         "arccos" => operands[0].acos(),
                         "arctan" => operands[0].atan(),
@@ -316,7 +315,6 @@ fn evaluate_postfix(stack: &Vec<String>) -> f64 {
                         "fract" => operands[0].fract(),
                         "abs" => operands[0].abs(),
                         "sqrt" => operands[0].sqrt(),
-                        "cbrt" => operands[0].cbrt(),
                         "ln" => operands[0].ln(),
                         "log" => operands[1].log(operands[0]), // assuming argument one is base; the func is number.log(base)
                         "max" => operands[0].max(operands[1]),
@@ -347,7 +345,7 @@ fn evaluate_postfix(stack: &Vec<String>) -> f64 {
 
 
 
-fn trapezium_rule(exp: &str, min_x: &f64, max_x: &f64, strips: &u16) -> f64 { // Integrate: the actual purpose of this program, after only 350 lines
+fn trapezium_rule(exp: &str, min_x: &f64, max_x: &f64, strips: &u64) -> f64 { // Integrate: the actual purpose of this program, after only 350 lines
     // Calculate strip width
 
     let interval = (max_x - min_x).abs();

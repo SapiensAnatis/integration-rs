@@ -127,7 +127,7 @@ fn shunting_yard(exp: &str) -> Vec<String> {
     // Tokenize exp:
     for token in exp.trim().split(" ") {
         // First check if it's a number
-        if token_is_number(token) || token == "x" {
+        if token_is_number(token) || token == "x" || token == "pi" || token == "π" || token == "e" {
             // If so, simply push to stack
             output.push(token);
         } // Function token?
@@ -369,7 +369,7 @@ fn trapezium_rule(exp: &str, min_x: &f64, max_x: &f64, strips: &u64) -> f64 { //
     result += y_values[0];
     y_values.remove(0);
     // Then add all except the outer ones again
-    for value in &y_values { result += 2f64 * value.clone(); }
+    for value in &y_values { result += 2f64 * value; }
     // Finally multiply all by 0.5 * h
     result *= 0.5f64 * strip_width;
     return result;

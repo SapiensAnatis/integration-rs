@@ -22,7 +22,7 @@ fn main() {
 
     let (is_valid, reason) = expression_is_valid(&input_exp);
     if is_valid {
-        println!("4-strip area between 0 and 4: {}", trapezium_rule(&input_exp, &start, &end, &strips));
+        println!("{}-strip area between 0 and 4: {}", strips, trapezium_rule(&input_exp, &start, &end, &strips));
     } else {
         println!("Invalid expression: {}", reason);
     }
@@ -60,24 +60,14 @@ fn clean_expression(exp: &str) -> String {
     let mut modified_exp = String::from(exp.replace(" ", "")); // Create an actual string from our ref string
     // Remove all whitespace so we can be sure of what we're dealing with
 
-    // We'll first parse x so we have a fully non-algebraic expression:
-    modified_exp = modified_exp.replace(" ", "");
-    // if there is no number in front of x, make it 1*x for simplicity
-    for lone_x in Regex::new(r"[^a\d\)]x").unwrap().find_iter(exp) { // do on exp to stop borrow checker complaining about mutably borrowing below
-        // Match x characters directly after operators/brackets/spaces/etc
-        // change just 'x' to '1x' so the next bit of code is universal
-        // Also only match spaces and newlines in front so as not to get confused with max()
-
-        // True start is start+1 since I can't use lookbehinds in Rust
-        modified_exp.insert_str(lone_x.start()+1, "1"); 
-    
+    // Change 4x into 4*x
+    let mut stars_added = 0;
+    for not_a_function_x in Regex::new(r"\d+x").unwrap().find_iter(&exp.replace(" ", "")) {
+        println!("Found match {} at {}-{}", not_a_function_x.as_str(), not_a_function_x.start(), not_a_function_x.end());
+        modified_exp.insert_str(not_a_function_x.end()-1+stars_added, "*");
+        stars_added += 1; // need to update info to keep indices relevant
     }
-    modified_exp = modified_exp.replace("x1", "1x"); // for some reason this can happen with powers. temporary hack
-    
-    // Now we replace 4x with 4*x so it makes sense. This is why we changed x to 1x, so it's now 1*x.
-    for not_a_function_x in Regex::new(r"[^a]x").unwrap().find_iter(exp) {
-        modified_exp.insert_str(not_a_function_x.start()+2, "*");
-    }
+    println!("Fixed x coefficients: {}", modified_exp);
                     
 
     // Have bracket multiplication make sense to SY algorithm:
@@ -89,7 +79,7 @@ fn clean_expression(exp: &str) -> String {
                     .into_owned();
 
     for bracket_coefficient in Regex::new(r"\d\(").unwrap().find_iter(exp) {
-        modified_exp.insert_str(bracket_coefficient.start()+1, "*"); // Change a(x) to a*(x) for comprehension  
+        modified_exp.insert_str(bracket_coefficient.end()-1, "*"); // Change a(x) to a*(x) for comprehension  
     }
 
     modified_exp = modified_exp.replace("−", "-"); // Some people like to be special and use a weird minus sign.
@@ -233,19 +223,8 @@ fn convert_str_vec(vec: &Vec<&str>) -> Vec<String> {
 
 // RPN funcs
 
-fn substitute_rpn(postfix_exp: &Vec<String>, x: &f64) -> Vec<String> {
-    let mut output: Vec<String> = Vec::new();
-    
-    for token in postfix_exp {
-        if token == "x" {
-            output.push(x.to_string()); 
-        } else { output.push(token.to_string()); }
-    }
-    
-    return output;
-}
 
-fn evaluate_postfix(stack: &Vec<String>) -> f64 {
+fn evaluate_postfix(stack: &Vec<String>, x: f64) -> f64 {
     let mut output: Vec<f64> = Vec::new();
 
     while output.len() != 1 { // Process
@@ -253,6 +232,10 @@ fn evaluate_postfix(stack: &Vec<String>) -> f64 {
             if token_is_number(token.as_str()) {
                 output.push(token.parse::<f64>().expect("Failed to convert numerical token to f64"));
             } 
+
+            else if token == "x" {
+                output.push(x);
+            }
             
             else { // The token is an op/func
                 let num_args = match token.as_str() { // How many args does our function/op need?
@@ -352,13 +335,14 @@ fn trapezium_rule(exp: &str, min_x: &f64, max_x: &f64, strips: &u64) -> f64 { //
     let strip_width = interval / strips.clone() as f64;
     let mut y_values: Vec<f64> = Vec::new();
     // RPN our exp
-    let rpn = shunting_yard(&clean_expression(&exp));
+    let clean_exp = &clean_expression(&exp);
+    println!("Cleaned exp: {}", clean_exp);
+    let rpn = shunting_yard(clean_exp);
     // Get y-values for formula
     for i in 0..strips+1 {
+        // x = min_x + strip_width * i
         y_values.push(
-            evaluate_postfix(
-                &substitute_rpn(&rpn, &(min_x + strip_width * (i as f64)) )
-            )
+            evaluate_postfix(&rpn, min_x + strip_width * (i as f64)) 
         );
     }
 

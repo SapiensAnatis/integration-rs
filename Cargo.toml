@@ -6,4 +6,3 @@ authors = ["sapiensanatis"]
 [dependencies]
 regex = "0.2"
 lazy_static = "0.2.8"
-eval = "0.4.0"

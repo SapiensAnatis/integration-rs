@@ -1,5 +1,6 @@
 extern crate regex;
 #[macro_use] extern crate lazy_static;
+
 use regex::Regex;
 use std::io;
 use std::io::prelude::*;   
@@ -8,13 +9,21 @@ fn main() {
     //let mut input_exp = String::new();
     println!("Please enter an equation of the form y = f(x):");
     let input_exp = get_input("y =");
-    let strips_str = get_input("How many strips do you want to use?");
+
+    // The accuracy value is used as the number of strips in the trapezium rule, and its reciprocal is used as the rectangle width in the rectangle rule
+    let accuracy_str = get_input("Please enter an accuracy value (higher = better, integers above zero)");
+    // These next ones should be self-explanatory
     let start_str = get_input("Where on the x-axis does the region start?");
     let end_str = get_input("Where does it end?");
 
     // Parse args
-    let strips = strips_str.trim().parse::<u64>()
+    let accuracy = accuracy_str.trim().parse::<u64>()
         .expect("Real numbers only, please.");
+    if accuracy == 0 { // Don't check for less than zero because that will fail the above parse check (it parses to unsigned)
+        println!("The acuracy value has to be a non-zero positive integer!");
+        return;
+    }
+
     let start = start_str.trim().parse::<f64>()
         .expect("Real numbers only, please.");
     let end = end_str.trim().parse::<f64>()
@@ -22,7 +31,13 @@ fn main() {
 
     let (is_valid, reason) = expression_is_valid(&input_exp);
     if is_valid {
-        println!("{}-strip area between 0 and 4: {}", strips, trapezium_rule(&input_exp, &start, &end, &strips));
+        let trap_estimate = trapezium_rule(&input_exp, &start, &end, &accuracy);
+        let rect_estimate = rectangle_rule(&input_exp, &start, &end, &(1f64/(accuracy as f64)));
+
+        let simpson_estimate = (2f64*rect_estimate + trap_estimate) / 3f64;
+        println!("Simpson rule estimate for the area bounded by the curve y = {} and the x-axis between {} and {}:", input_exp, start, end);
+        println!("\t{}", simpson_estimate);
+
     } else {
         println!("Invalid expression: {}", reason);
     }
@@ -63,11 +78,11 @@ fn clean_expression(exp: &str) -> String {
     // Change 4x into 4*x
     let mut stars_added = 0;
     for not_a_function_x in Regex::new(r"\d+x").unwrap().find_iter(&exp.replace(" ", "")) {
-        println!("Found match {} at {}-{}", not_a_function_x.as_str(), not_a_function_x.start(), not_a_function_x.end());
+        // println!("Found match {} at {}-{}", not_a_function_x.as_str(), not_a_function_x.start(), not_a_function_x.end());
         modified_exp.insert_str(not_a_function_x.end()-1+stars_added, "*");
         stars_added += 1; // need to update info to keep indices relevant
     }
-    println!("Fixed x coefficients: {}", modified_exp);
+    // println!("Fixed x coefficients: {}", modified_exp);
                     
 
     // Have bracket multiplication make sense to SY algorithm:
@@ -336,7 +351,6 @@ fn trapezium_rule(exp: &str, min_x: &f64, max_x: &f64, strips: &u64) -> f64 { //
     let mut y_values: Vec<f64> = Vec::new();
     // RPN our exp
     let clean_exp = &clean_expression(&exp);
-    println!("Cleaned exp: {}", clean_exp);
     let rpn = shunting_yard(clean_exp);
     // Get y-values for formula
     for i in 0..strips+1 {
@@ -356,5 +370,40 @@ fn trapezium_rule(exp: &str, min_x: &f64, max_x: &f64, strips: &u64) -> f64 { //
     for value in &y_values { result += 2f64 * value; }
     // Finally multiply all by 0.5 * h
     result *= 0.5f64 * strip_width;
+    return result;
+}
+
+fn rectangle_rule(exp: &str, min_x: &f64, max_x: &f64, rect_width: &f64) -> f64 {
+    let interval = max_x - min_x;
+
+    // First add up all the rectangles which fit wholly into the given interval
+
+    // This value could be cast as a u64 immediately but would then have to be recast several times to f64 for future multiplication with f64s
+    // By contrast, not initially casting it to u64 means that we only have to cast it once to u64 for use in a for loop statement below
+    let rect_count = (interval / rect_width).floor(); 
+
+    let clean_exp = &clean_expression(&exp);
+    let rpn = shunting_yard(clean_exp);
+
+    let mut result = 0f64;
+
+    // For loop which iteratively calculates the area of each rectangle and adds it to total:   
+    for i in 0..(rect_count as u64) {
+        let rect_start = rect_width * (i as f64);
+        let rect_end = rect_width * ((i+1) as f64);
+        let rect_midpoint = (rect_start + rect_end) / 2f64;
+
+        let y_midpoint = evaluate_postfix(&rpn, rect_midpoint);
+
+        result += y_midpoint * rect_width;
+    }
+
+    // Now we have to consider anything left over at the end:
+    let rect_remainder = interval % rect_width;
+    let remainder_midpoint = ((rect_count * rect_width) + max_x) / 2f64;
+    let remainder_y = evaluate_postfix(&rpn, remainder_midpoint);
+    
+    result += remainder_y * rect_remainder;
+
     return result;
 }
